@@ -11,11 +11,12 @@
 #endif // MATRIX_MALLOC
 
 #ifndef MATRIX_ASSERT
-#include <assert.h> 
+#include <assert.h>
 #define MATRIX_ASSERT assert
-#endif //MATRIX_ASSERT
+#endif // MATRIX_ASSERT
 
-typedef struct {
+typedef struct
+{
     size_t rows;
     size_t cols;
     float *elements;
@@ -28,7 +29,9 @@ float sigmoidf(float x);
 
 Matrix mat_alloc(size_t rows, size_t cols);
 void mat_rand(Matrix m, float start, float end);
-void mat_mul(Matrix dst, Matrix a, Matrix b); 
+void mat_mul(Matrix dst, Matrix a, Matrix b);
+Matrix mat_row(Matrix m, size_t row);
+void mat_copy(Matrix dst, Matrix src);
 void mat_sum(Matrix dst, Matrix m);
 void mat_sigmoid(Matrix m);
 void mat_print(Matrix m, char *name);
@@ -39,11 +42,13 @@ void mat_fill(Matrix m, float val);
 
 #ifdef MATRIX_IMPLEMENTATION
 
-float sigmoidf(float x) {
+float sigmoidf(float x)
+{
     return 1.f / (1.f + expf(-x));
 }
 
-Matrix mat_alloc(size_t rows, size_t cols) {
+Matrix mat_alloc(size_t rows, size_t cols)
+{
     Matrix m;
     m.rows = rows;
     m.cols = cols;
@@ -52,53 +57,88 @@ Matrix mat_alloc(size_t rows, size_t cols) {
     return m;
 }
 
-float randf(void) {
-    return rand() / (float) RAND_MAX;
+float randf(void)
+{
+    return rand() / (float)RAND_MAX;
 }
 
-void mat_rand(Matrix m, float start, float end) {
-    for(size_t i = 0; i < m.rows; i++) {
-        for(size_t j = 0; j < m.cols; j++) {
+void mat_rand(Matrix m, float start, float end)
+{
+    for (size_t i = 0; i < m.rows; i++)
+    {
+        for (size_t j = 0; j < m.cols; j++)
+        {
             MAT_AT(m, i, j) = start + (end - start) * randf();
         }
     }
 }
 
-void mat_mul(Matrix dst, Matrix a, Matrix b) {
+void mat_mul(Matrix dst, Matrix a, Matrix b)
+{
     MATRIX_ASSERT(a.cols == b.rows);
     MATRIX_ASSERT(dst.rows == a.rows);
     MATRIX_ASSERT(dst.cols == b.cols);
-    for(size_t i = 0; i < dst.rows; i++) {
-        for(size_t j = 0; j < dst.cols; j++) {
+    for (size_t i = 0; i < dst.rows; i++)
+    {
+        for (size_t j = 0; j < dst.cols; j++)
+        {
             MAT_AT(dst, i, j) = 0;
-            for(size_t k = 0; k < a.cols; k++) {
+            for (size_t k = 0; k < a.cols; k++)
+            {
                 MAT_AT(dst, i, j) += MAT_AT(a, i, k) * MAT_AT(b, k, j);
             }
         }
     }
 }
-void mat_sum(Matrix dst, Matrix a) {
+
+Matrix mat_row(Matrix m, size_t row)
+{
+    return (Matrix){.rows = 1, .cols = m.cols, .elements = &MAT_AT(m, row, 0)};
+}
+void mat_copy(Matrix dst, Matrix src)
+{
+    MATRIX_ASSERT(dst.rows == src.rows);
+    MATRIX_ASSERT(dst.cols == src.cols);
+    for (size_t i = 0; i < dst.rows; i++)
+    {
+        for (size_t j = 0; j < dst.cols; j++)
+        {
+            MAT_AT(dst, i, j) = MAT_AT(src, i, j);
+        }
+    }
+}
+
+void mat_sum(Matrix dst, Matrix a)
+{
     MATRIX_ASSERT(dst.rows == a.rows);
     MATRIX_ASSERT(dst.cols == a.cols);
-    for(size_t i = 0; i < dst.rows; i++) {
-        for(size_t j = 0; j < dst.cols; j++) {
+    for (size_t i = 0; i < dst.rows; i++)
+    {
+        for (size_t j = 0; j < dst.cols; j++)
+        {
             MAT_AT(dst, i, j) += MAT_AT(a, i, j);
         }
     }
 }
 
-void mat_sigmoid(Matrix m) {
-    for(size_t i = 0; i < m.rows; i++) {
-        for(size_t j = 0; j < m.cols; j++) {
+void mat_sigmoid(Matrix m)
+{
+    for (size_t i = 0; i < m.rows; i++)
+    {
+        for (size_t j = 0; j < m.cols; j++)
+        {
             MAT_AT(m, i, j) = sigmoidf(MAT_AT(m, i, j));
         }
     }
 }
-void mat_print(Matrix m, char *name) {
+void mat_print(Matrix m, char *name)
+{
     printf("%s = [\n", name);
-    for(size_t i = 0; i < m.rows; i++) {
+    for (size_t i = 0; i < m.rows; i++)
+    {
         printf("    [");
-        for(size_t j = 0; j < m.cols; j++) {
+        for (size_t j = 0; j < m.cols; j++)
+        {
             printf("  %f", MAT_AT(m, i, j));
         }
         printf(" ]\n");
@@ -106,12 +146,15 @@ void mat_print(Matrix m, char *name) {
     printf("]\n");
 }
 
-void mat_fill(Matrix m, float val) {
-    for(size_t i = 0; i < m.rows; i++) {
-        for(size_t j = 0; j < m.cols; j++) {
+void mat_fill(Matrix m, float val)
+{
+    for (size_t i = 0; i < m.rows; i++)
+    {
+        for (size_t j = 0; j < m.cols; j++)
+        {
             MAT_AT(m, i, j) = val;
         }
     }
 }
 
-#endif // MATRIX_IMPLEMENTATION 
+#endif // MATRIX_IMPLEMENTATION
