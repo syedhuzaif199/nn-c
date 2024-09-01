@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <math.h>
 
 #ifndef MATRIX_MALLOC
 #include <stdlib.h>
@@ -22,18 +23,25 @@ typedef struct {
 
 #define MAT_AT(m, i, j) (m).elements[(i) * (m).cols + (j)]
 
-float rand_float(void);
+float randf(void);
+float sigmoidf(float x);
 
 Matrix mat_alloc(size_t rows, size_t cols);
 void mat_rand(Matrix m, float start, float end);
 void mat_mul(Matrix dst, Matrix a, Matrix b); 
 void mat_sum(Matrix dst, Matrix m);
-void mat_print(Matrix m);
+void mat_sigmoid(Matrix m);
+void mat_print(Matrix m, char *name);
 void mat_fill(Matrix m, float val);
+#define MAT_PRINT(m) mat_print(m, #m)
 
 #endif // MATRIX_H_
 
 #ifdef MATRIX_IMPLEMENTATION
+
+float sigmoidf(float x) {
+    return 1.f / (1.f + expf(-x));
+}
 
 Matrix mat_alloc(size_t rows, size_t cols) {
     Matrix m;
@@ -44,14 +52,14 @@ Matrix mat_alloc(size_t rows, size_t cols) {
     return m;
 }
 
-float rand_float(void) {
+float randf(void) {
     return rand() / (float) RAND_MAX;
 }
 
 void mat_rand(Matrix m, float start, float end) {
     for(size_t i = 0; i < m.rows; i++) {
         for(size_t j = 0; j < m.cols; j++) {
-            MAT_AT(m, i, j) = start + (end - start) * rand_float();
+            MAT_AT(m, i, j) = start + (end - start) * randf();
         }
     }
 }
@@ -78,13 +86,24 @@ void mat_sum(Matrix dst, Matrix a) {
         }
     }
 }
-void mat_print(Matrix m) {
+
+void mat_sigmoid(Matrix m) {
     for(size_t i = 0; i < m.rows; i++) {
         for(size_t j = 0; j < m.cols; j++) {
-            printf("%f ", MAT_AT(m, i, j));
+            MAT_AT(m, i, j) = sigmoidf(MAT_AT(m, i, j));
         }
-        printf("\n");
     }
+}
+void mat_print(Matrix m, char *name) {
+    printf("%s = [\n", name);
+    for(size_t i = 0; i < m.rows; i++) {
+        printf("    [");
+        for(size_t j = 0; j < m.cols; j++) {
+            printf("  %f", MAT_AT(m, i, j));
+        }
+        printf(" ]\n");
+    }
+    printf("]\n");
 }
 
 void mat_fill(Matrix m, float val) {
