@@ -27,14 +27,6 @@ typedef struct
 
 #define ARRAY_LEN(x) sizeof((x)) / sizeof((x)[0])
 
-typedef struct
-{
-    size_t count; // The number of layers
-    Matrix *weights;
-    Matrix *biases;
-    Matrix *activations; // The number of activation layers is count + 1
-} NN;
-
 float randf(void);
 float sigmoidf(float x);
 
@@ -46,41 +38,36 @@ Matrix mat_row(Matrix m, size_t row);
 void mat_copy(Matrix dst, Matrix src);
 void mat_sum(Matrix dst, Matrix m);
 void mat_sigmoid(Matrix m);
-void mat_print(Matrix m, char *name);
 void mat_fill(Matrix m, float val);
 Matrix mat_sub(Matrix m, size_t i, size_t j, size_t width, size_t height);
+
+void mat_print(Matrix m, char *name, size_t padding);
+#define MAT_PRINT(m) mat_print(m, #m, 0)
+
+typedef struct
+{
+    size_t count; // The number of layers
+    Matrix *weights;
+    Matrix *biases;
+    Matrix *activations; // The number of activation layers is count + 1
+} NN;
+
+#define NN_INPUT(nn) (nn).activations[0]
+#define NN_OUTPUT(nn) (nn).activations[(nn).count]
+
 NN nn_alloc(size_t *layers, size_t count);
-#define MAT_PRINT(m) mat_print(m, #m)
+void nn_rand(NN nn, float start, float end);
+void nn_forward(NN nn);
+float nn_cost(NN nn, Matrix x, Matrix y);
+void nn_finite_diff(NN nn, NN grads, float eps, Matrix x, Matrix y);
+void nn_learn(NN nn, NN grads, float rate);
+
+void nn_print(NN nn, char *name);
+#define NN_PRINT(nn) nn_print((nn), #nn);
 
 #endif // NN_H_
 
 #ifdef NN_IMPLEMENTATION
-
-NN nn_alloc(size_t *layers, size_t count)
-{
-    NN_ASSERT(count > 0);
-    NN nn;
-    nn.count = count - 1;
-    nn.weights = (Matrix *)NN_MALLOC(sizeof(*nn.weights) * (nn.count));
-    NN_ASSERT(nn.weights != NULL);
-
-    nn.biases = (Matrix *)NN_MALLOC(sizeof(*nn.biases) * nn.count);
-    NN_ASSERT(nn.biases != NULL);
-
-    nn.activations = (Matrix *)NN_MALLOC(sizeof(*nn.activations) * count);
-    NN_ASSERT(nn.activations != NULL);
-
-    nn.activations[0] = mat_alloc(1, layers[0]);
-
-    for (size_t i = 0; i < nn.count; i++)
-    {
-        nn.weights[i] = mat_alloc(nn.activations[i].cols, layers[i + 1]);
-        nn.biases[i] = mat_alloc(1, layers[i + 1]);
-        nn.activations[i + 1] = mat_alloc(1, layers[i + 1]);
-    }
-
-    return nn;
-}
 
 float sigmoidf(float x)
 {
@@ -177,19 +164,20 @@ void mat_sigmoid(Matrix m)
         }
     }
 }
-void mat_print(Matrix m, char *name)
+void mat_print(Matrix m, char *name, size_t padding)
 {
-    printf("%s = [\n", name);
+    printf("%*s", (int)padding, "");
+    printf("%*s%s = [\n", (int)padding, "", name);
     for (size_t i = 0; i < m.rows; i++)
     {
-        printf("    [");
+        printf("%*s    [", (int)padding, "");
         for (size_t j = 0; j < m.cols; j++)
         {
-            printf("  %f", MAT_AT(m, i, j));
+            printf("%*s  %f", (int)padding, "", MAT_AT(m, i, j));
         }
-        printf(" ]\n");
+        printf("%*s ]\n", (int)padding, "");
     }
-    printf("]\n");
+    printf("%*s]\n", (int)padding, "");
 }
 
 void mat_fill(Matrix m, float val)
@@ -222,4 +210,140 @@ Matrix mat_from_data(size_t rows, size_t cols, float *data)
         .elements = data,
     };
 }
+
+NN nn_alloc(size_t *layers, size_t count)
+{
+    NN_ASSERT(count > 0);
+    NN nn;
+    nn.count = count - 1;
+    nn.weights = (Matrix *)NN_MALLOC(sizeof(*nn.weights) * (nn.count));
+    NN_ASSERT(nn.weights != NULL);
+
+    nn.biases = (Matrix *)NN_MALLOC(sizeof(*nn.biases) * nn.count);
+    NN_ASSERT(nn.biases != NULL);
+
+    nn.activations = (Matrix *)NN_MALLOC(sizeof(*nn.activations) * count);
+    NN_ASSERT(nn.activations != NULL);
+
+    nn.activations[0] = mat_alloc(1, layers[0]);
+
+    for (size_t i = 0; i < nn.count; i++)
+    {
+        nn.weights[i] = mat_alloc(nn.activations[i].cols, layers[i + 1]);
+        nn.biases[i] = mat_alloc(1, layers[i + 1]);
+        nn.activations[i + 1] = mat_alloc(1, layers[i + 1]);
+    }
+
+    return nn;
+}
+
+void nn_rand(NN nn, float start, float end)
+{
+    for (size_t i = 0; i < nn.count; i++)
+    {
+        mat_rand(nn.weights[i], start, end);
+        mat_rand(nn.biases[i], start, end);
+    }
+}
+
+void nn_forward(NN nn)
+{
+    for (size_t i = 0; i < nn.count; i++)
+    {
+        mat_mul(nn.activations[i + 1], nn.activations[i], nn.weights[i]);
+        mat_sum(nn.activations[i + 1], nn.biases[i]);
+        mat_sigmoid(nn.activations[i + 1]);
+    }
+}
+
+float nn_cost(NN nn, Matrix x, Matrix y)
+{
+    NN_ASSERT(x.rows == y.rows);
+    NN_ASSERT(NN_INPUT(nn).cols == x.cols);
+    NN_ASSERT(y.cols == NN_OUTPUT(nn).cols);
+    const size_t n = x.rows;
+    float cost = 0.f;
+    for (size_t i = 0; i < n; i++)
+    {
+        const Matrix x_i = mat_row(x, i);
+        const Matrix y_i = mat_row(y, i);
+        mat_copy(NN_INPUT(nn), x_i);
+        nn_forward(nn);
+        size_t q = y.cols;
+        for (size_t j = 0; j < q; j++)
+        {
+            const float diff = MAT_AT(NN_OUTPUT(nn), 0, j) - MAT_AT(y_i, 0, j);
+            cost += diff * diff;
+        }
+    }
+
+    return cost / n;
+}
+
+void nn_finite_diff(NN nn, NN grads, float eps, Matrix x, Matrix y)
+{
+    float saved;
+    float cost = nn_cost(nn, x, y);
+    for (size_t i = 0; i < nn.count; i++)
+    {
+        for (size_t j = 0; j < nn.weights[i].rows; j++)
+        {
+            for (size_t k = 0; k < nn.weights[i].cols; k++)
+            {
+                saved = MAT_AT(nn.weights[i], j, k);
+                MAT_AT(nn.weights[i], j, k) += eps;
+                MAT_AT(grads.weights[i], j, k) = (nn_cost(nn, x, y) - cost) / eps;
+                MAT_AT(nn.weights[i], j, k) = saved;
+            }
+        }
+
+        for (size_t j = 0; j < nn.biases[i].rows; j++)
+        {
+            for (size_t k = 0; k < nn.biases[i].cols; k++)
+            {
+                saved = MAT_AT(nn.biases[i], j, k);
+                MAT_AT(nn.biases[i], j, k) += eps;
+                MAT_AT(grads.biases[i], j, k) = (nn_cost(nn, x, y) - cost) / eps;
+                MAT_AT(nn.biases[i], j, k) = saved;
+            }
+        }
+    }
+}
+
+void nn_learn(NN nn, NN grads, float rate)
+{
+    for (size_t i = 0; i < nn.count; i++)
+    {
+        for (size_t j = 0; j < nn.weights[i].rows; j++)
+        {
+            for (size_t k = 0; k < nn.weights[i].cols; k++)
+            {
+                MAT_AT(nn.weights[i], j, k) -= rate * MAT_AT(grads.weights[i], j, k);
+            }
+        }
+
+        for (size_t j = 0; j < nn.biases[i].rows; j++)
+        {
+            for (size_t k = 0; k < nn.biases[i].cols; k++)
+            {
+                MAT_AT(nn.biases[i], j, k) -= rate * MAT_AT(grads.biases[i], j, k);
+            }
+        }
+    }
+}
+
+void nn_print(NN nn, char *name)
+{
+    char buf[256];
+    printf("%s = [\n", name);
+    for (size_t i = 0; i < nn.count; i++)
+    {
+        snprintf(buf, sizeof(buf), "weights[%zu]", i);
+        mat_print(nn.weights[i], buf, 2);
+        snprintf(buf, sizeof(buf), "biases[%zu]", i);
+        mat_print(nn.biases[i], buf, 2);
+    }
+    printf("]\n");
+}
+
 #endif // NN_IMPLEMENTATION
