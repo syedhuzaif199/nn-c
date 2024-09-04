@@ -56,10 +56,12 @@ typedef struct
 #define NN_OUTPUT(nn) (nn).activations[(nn).count]
 
 NN nn_alloc(size_t *layers, size_t count);
+void nn_zero(NN nn);
 void nn_rand(NN nn, float start, float end);
 void nn_forward(NN nn);
 float nn_cost(NN nn, Matrix x, Matrix y);
 void nn_finite_diff(NN nn, NN grads, float eps, Matrix x, Matrix y);
+void nn_backprop(NN nn, NN grads, Matrix x, Matrix y);
 void nn_learn(NN nn, NN grads, float rate);
 
 void nn_print(NN nn, char *name);
@@ -237,6 +239,17 @@ NN nn_alloc(size_t *layers, size_t count)
     return nn;
 }
 
+void nn_zero(NN nn)
+{
+    for (size_t i = 0; i < nn.count; i++)
+    {
+        mat_fill(nn.weights[i], 0);
+        mat_fill(nn.biases[i], 0);
+        mat_fill(nn.activations[i], 0);
+    }
+    mat_fill(NN_OUTPUT(nn), 0);
+}
+
 void nn_rand(NN nn, float start, float end)
 {
     for (size_t i = 0; i < nn.count; i++)
@@ -265,14 +278,14 @@ float nn_cost(NN nn, Matrix x, Matrix y)
     float cost = 0.f;
     for (size_t i = 0; i < n; i++)
     {
-        const Matrix x_i = mat_row(x, i);
-        const Matrix y_i = mat_row(y, i);
-        mat_copy(NN_INPUT(nn), x_i);
+        const Matrix xi = mat_row(x, i);
+        const Matrix yi = mat_row(y, i);
+        mat_copy(NN_INPUT(nn), xi);
         nn_forward(nn);
         size_t q = y.cols;
         for (size_t j = 0; j < q; j++)
         {
-            const float diff = MAT_AT(NN_OUTPUT(nn), 0, j) - MAT_AT(y_i, 0, j);
+            const float diff = MAT_AT(NN_OUTPUT(nn), 0, j) - MAT_AT(yi, 0, j);
             cost += diff * diff;
         }
     }
@@ -310,6 +323,75 @@ void nn_finite_diff(NN nn, NN grads, float eps, Matrix x, Matrix y)
     }
 }
 
+void nn_backprop(NN nn, NN grads, Matrix x, Matrix y)
+{
+    NN_ASSERT(x.rows == y.rows);
+    NN_ASSERT(NN_INPUT(nn).cols == x.cols);
+    NN_ASSERT(y.cols == NN_OUTPUT(nn).cols);
+
+    nn_zero(grads);
+
+    size_t n = y.rows;
+
+    for (size_t i = 0; i < n; i++)
+    {
+        // i: sample index
+        const Matrix xi = mat_row(x, i);
+        mat_copy(NN_INPUT(nn), xi);
+        nn_forward(nn);
+
+        for (size_t j = 0; j <= grads.count; j++)
+        {
+            mat_fill(grads.activations[j], 0);
+        }
+
+        for (size_t j = 0; j < y.cols; j++)
+        {
+            // j: output index
+            MAT_AT(NN_OUTPUT(grads), 0, j) = MAT_AT(NN_OUTPUT(nn), 0, j) - MAT_AT(y, i, j);
+        }
+
+        for (size_t l = nn.count; l > 0; l--)
+        {
+            // l: layer index
+            for (size_t j = 0; j < nn.activations[l].cols; j++)
+            {
+                // j: neuron index of layer l
+                const float a = MAT_AT(nn.activations[l], 0, j);
+                const float da = MAT_AT(grads.activations[l], 0, j);
+                MAT_AT(grads.biases[l - 1], 0, j) += 2 * da * a * (1 - a);
+                for (size_t k = 0; k < nn.activations[l - 1].cols; k++)
+                {
+                    // k: neuron index of layer l - 1
+                    const float prev_a = MAT_AT(nn.activations[l - 1], 0, k);
+                    MAT_AT(grads.weights[l - 1], k, j) += 2 * da * a * (1 - a) * prev_a;
+                    const float w = MAT_AT(nn.weights[l - 1], k, j);
+                    MAT_AT(grads.activations[l - 1], 0, k) += 2 * da * a * (1 - a) * w;
+                }
+            }
+        }
+    }
+
+    for (size_t i = 0; i < grads.count; i++)
+    {
+        for (size_t j = 0; j < grads.weights[i].rows; j++)
+        {
+            for (size_t k = 0; k < grads.weights[i].cols; k++)
+            {
+                MAT_AT(grads.weights[i], j, k) /= n;
+            }
+        }
+        for (size_t j = 0; j < grads.biases[i].rows; j++)
+        {
+            for (size_t k = 0; k < grads.biases[i].cols; k++)
+            {
+                MAT_AT(grads.biases[i], j, k) /= n;
+            }
+        }
+    }
+}
+
+void nn_learn(NN nn, NN grads, float rate);
 void nn_learn(NN nn, NN grads, float rate)
 {
     for (size_t i = 0; i < nn.count; i++)
