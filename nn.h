@@ -62,8 +62,8 @@ void nn_forward(NN nn);
 float nn_cost(NN nn, Matrix x, Matrix y);
 void nn_finite_diff(NN nn, NN grads, float eps, Matrix x, Matrix y);
 void nn_backprop(NN nn, NN grads, Matrix x, Matrix y);
-void nn_learn(NN nn, NN grads, float rate);
-
+void nn_learn_epoch(NN nn, NN grads, float rate);
+void nn_train(NN nn, NN grads, Matrix x, Matrix y, size_t epochs, float rate, int printCost);
 void nn_print(NN nn, char *name);
 #define NN_PRINT(nn) nn_print((nn), #nn);
 
@@ -391,8 +391,7 @@ void nn_backprop(NN nn, NN grads, Matrix x, Matrix y)
     }
 }
 
-void nn_learn(NN nn, NN grads, float rate);
-void nn_learn(NN nn, NN grads, float rate)
+void nn_learn_epoch(NN nn, NN grads, float rate)
 {
     for (size_t i = 0; i < nn.count; i++)
     {
@@ -410,6 +409,19 @@ void nn_learn(NN nn, NN grads, float rate)
             {
                 MAT_AT(nn.biases[i], j, k) -= rate * MAT_AT(grads.biases[i], j, k);
             }
+        }
+    }
+}
+void nn_train(NN nn, NN grads, Matrix x, Matrix y, size_t epochs, float rate, int printCost)
+{
+    for (size_t i = 0; i < epochs; i++)
+    {
+        nn_backprop(nn, grads, x, y);
+        nn_learn_epoch(nn, grads, rate);
+        if (printCost)
+        {
+            float c = nn_cost(nn, x, y);
+            printf("%zu: Cost = %f\n", i, c);
         }
     }
 }

@@ -86,7 +86,10 @@ void print_image(float *data)
     {
         for (size_t j = 0; j < 28; j++)
         {
-            printf("%c", data[i * 28 + j] > 0.5 ? '#' : '.');
+            const float val = data[i * 28 + j];
+            printf("%c", val > 0.75 ? '$' : val > 0.5 ? '#'
+                                        : val > 0.25  ? '+'
+                                                      : '.');
         }
         printf("\n");
     }
